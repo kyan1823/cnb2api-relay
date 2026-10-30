@@ -1,0 +1,46 @@
+# Fixed-domain relay for cnb2api (nginx + registration service, one container).
+#
+#   cp register.env.example register.env    # then set REG_TOKEN
+#   docker compose up -d --build
+#
+# Everything the relay needs comes from bind mounts:
+#   ./nginx/http.d  -> /etc/nginx/http.d        vhost + upstream map (rw)
+#   ./nginx/ssl     -> /etc/nginx/ssl           fullchain.pem / privkey.pem (rw)
+#   ./register.env  -> /root/.cnb/register.env  REG_TOKEN, shared with CNB (ro)
+#   ./certbot       -> /var/www/certbot         optional ACME webroot (ro)
+
+name: cnb2api-relay
+
+services:
+  relay:
+    build: .
+    image: cnb2api-relay:latest
+    container_name: cnb2api-relay
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      # Workspace port-proxy port; must match PROXY_PORT on the CNB side (9001).
+      UPSTREAM_PORT: "9001"
+      # Map file cnb-register.py rewrites, and how it reloads nginx. There is no
+      # systemctl inside the container, so use nginx's own reload signal.
+      UPSTREAM_CONF: /etc/nginx/http.d/cnb-ai-upstream.conf
+      REGISTER_ENV_FILE: /root/.cnb/register.env
+      RELOAD_CMD: "nginx -s reload"
+      # Only used as the CN of the self-signed certificate fallback.
+      SERVER_NAME: "ai.example.com"
+    volumes:
+      - ./nginx/http.d:/etc/nginx/http.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./register.env:/root/.cnb/register.env:ro
+      - ./certbot:/var/www/certbot:ro
+    healthcheck:
+      # A GET to /ops/register without a token must answer 403: that proves both
+      # nginx and the registration service are up. It deliberately does not
+      # touch the upstream workspace, which is allowed to be down.
+      test: ["CMD-SHELL", "test \"$$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 https://127.0.0.1/ops/register)\" = 403"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

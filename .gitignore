@@ -1,0 +1,14 @@
+.git
+*.log
+
+# secrets / runtime state
+register.env
+nginx/http.d/cnb-ai-upstream.conf
+nginx/http.d/cnb-ai-upstream.conf.*
+certbot/*
+!certbot/.gitkeep
+
+# TLS material
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt

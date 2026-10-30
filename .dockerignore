@@ -1,0 +1,8 @@
+.git
+*.log
+
+# never bake secrets or TLS material into the build context
+register.env
+nginx/http.d/cnb-ai-upstream.conf*
+nginx/ssl
+certbot
